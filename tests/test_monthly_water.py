@@ -1,0 +1,282 @@
+"""
+Isolated tests for the standalone monthly water model.
+
+Run only after separate approval.
+
+These tests do not write datasets or modify project files.
+Monthly calculations, when authorised, remain in memory.
+"""
+
+import copy
+import importlib.util
+import json
+import math
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = ROOT / "config" / "water_model_config.json"
+MODULE_PATH = ROOT / "water_model" / "monthly_water.py"
+
+EXPECTED_COLUMNS = [
+    "date",
+    "water_consumption_l",
+    "water_data_status",
+    "water_model_version",
+    "water_population_equivalent",
+    "water_demand_lpcd",
+    "water_operating_days",
+    "water_additional_use_l",
+    "water_benchmark_source",
+]
+
+
+def load_standalone_model():
+    """Import only the explicitly selected standalone module."""
+    spec = importlib.util.spec_from_file_location(
+        "isolated_monthly_water_under_test",
+        MODULE_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Cannot load standalone water module")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class MonthlyWaterTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = load_standalone_model()
+
+    def setUp(self):
+        self.config = self.model.load_water_config(CONFIG_PATH)
+
+    # T01
+    def test_01_load_approved_json(self):
+        result = self.model.load_water_config(CONFIG_PATH)
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["model_id"], "BBSR_ZONE_A_DEMO")
+
+    # T02
+    def test_02_missing_json_file(self):
+        nonexistent = (
+            CONFIG_PATH.parent / "__missing_water_test_config__.json"
+        )
+        self.assertFalse(nonexistent.exists())
+
+        with self.assertRaises(FileNotFoundError):
+            self.model.load_water_config(nonexistent)
+
+    # T03
+    def test_03_invalid_json_syntax(self):
+        """Malformed JSON must be rejected by the model loader."""
+        from io import StringIO
+
+        invalid_json = '{"population": invalid}'
+
+        # Provide malformed JSON entirely in memory.
+        with patch(
+            "pathlib.Path.open",
+            return_value=StringIO(invalid_json)
+        ):
+            with self.assertRaises(json.JSONDecodeError):
+                self.model.load_water_config(CONFIG_PATH)
+
+    # T04
+    def test_04_missing_required_field(self):
+        config = copy.deepcopy(self.config)
+        del config["population"]["equivalent_users"]
+
+        with self.assertRaises(ValueError):
+            self.model.validate_water_config(config)
+
+    # T05
+    def test_05_invalid_population(self):
+        for population in (0, -1, 1.5, True):
+            with self.subTest(population=population):
+                config = copy.deepcopy(self.config)
+                config["population"]["equivalent_users"] = population
+
+                with self.assertRaises(ValueError):
+                    self.model.validate_water_config(config)
+
+    # T06
+    def test_06_invalid_demand_rate(self):
+        for rate in (-1, 0, math.nan, math.inf, -math.inf):
+            with self.subTest(rate=rate):
+                config = copy.deepcopy(self.config)
+                config["demand"]["litres_per_person_per_day"] = rate
+
+                with self.assertRaises(ValueError):
+                    self.model.validate_water_config(config)
+
+    # T07
+    def test_07_invalid_operational_use(self):
+        for additional in (-1, math.nan, math.inf):
+            with self.subTest(additional=additional):
+                config = copy.deepcopy(self.config)
+                config["demand"]["additional_operational_use_l"] = additional
+
+                with self.assertRaises(ValueError):
+                    self.model.validate_water_config(config)
+
+    # T08
+    def test_08_incorrect_provenance(self):
+        config = copy.deepcopy(self.config)
+        config["output"]["data_status"] = "OBSERVED"
+
+        with self.assertRaises(ValueError):
+            self.model.validate_water_config(config)
+
+    # T09
+    def test_09_unsupported_model_version(self):
+        config = copy.deepcopy(self.config)
+        config["model_version"] = "unsupported_version"
+
+        with self.assertRaises(ValueError):
+            self.model.validate_water_config(config)
+
+    # T10
+    def test_10_unsupported_date_range(self):
+        config = copy.deepcopy(self.config)
+        config["reference_period"]["end_month"] = "2026-12"
+
+        with self.assertRaises(ValueError):
+            self.model.validate_water_config(config)
+
+    # T11
+    def test_11_approved_configuration_valid(self):
+        self.assertTrue(
+            self.model.validate_water_config(self.config)
+        )
+
+    # T12
+    def test_12_exactly_36_monthly_records(self):
+        result = self.model.build_monthly_water(self.config)
+        self.assertEqual(len(result), 36)
+
+    # T13
+    def test_13_complete_month_sequence(self):
+        result = self.model.build_monthly_water(self.config)
+
+        expected = pd.date_range(
+            "2023-01-01", "2025-12-01", freq="MS"
+        ).strftime("%Y-%m").tolist()
+
+        self.assertEqual(result["date"].tolist(), expected)
+        self.assertTrue(result["date"].is_unique)
+
+    # T14
+    def test_14_leap_year_calendar(self):
+        result = self.model.build_monthly_water(self.config)
+        by_month = result.set_index("date")
+
+        self.assertEqual(
+            int(by_month.loc["2024-02", "water_operating_days"]),
+            29
+        )
+        self.assertEqual(
+            int(by_month.loc["2023-02", "water_operating_days"]),
+            28
+        )
+        self.assertEqual(
+            int(by_month.loc["2025-02", "water_operating_days"]),
+            28
+        )
+
+    # T15
+    def test_15_calculation_formula(self):
+        result = self.model.build_monthly_water(self.config)
+
+        population = self.config["population"]["equivalent_users"]
+        rate = self.config["demand"]["litres_per_person_per_day"]
+        additional = self.config["demand"]["additional_operational_use_l"]
+
+        for row in result.itertuples(index=False):
+            expected = (
+                population * rate * row.water_operating_days
+                + additional
+            )
+            self.assertAlmostEqual(
+                row.water_consumption_l, expected
+            )
+
+    # T16
+    def test_16_exact_output_schema(self):
+        result = self.model.build_monthly_water(self.config)
+        self.assertEqual(result.columns.tolist(), EXPECTED_COLUMNS)
+
+    # T17
+    def test_17_synthetic_provenance(self):
+        result = self.model.build_monthly_water(self.config)
+
+        self.assertTrue(
+            result["water_data_status"]
+            .eq("SYNTHETIC_BENCHMARK_BASED")
+            .all()
+        )
+        self.assertTrue(
+            result["water_benchmark_source"].notna().all()
+        )
+
+    # T18
+    def test_18_deterministic_results(self):
+        first = self.model.build_monthly_water(
+            copy.deepcopy(self.config)
+        )
+        second = self.model.build_monthly_water(
+            copy.deepcopy(self.config)
+        )
+
+        pd.testing.assert_frame_equal(
+            first, second, check_dtype=True
+        )
+
+    # T19
+    def test_19_configuration_not_mutated(self):
+        before = copy.deepcopy(self.config)
+
+        self.model.build_monthly_water(self.config)
+
+        self.assertEqual(self.config, before)
+
+    # T20
+    def test_20_no_dataset_file_writes(self):
+        # Intercept common file-writing operations while calculating
+        # an in-memory result.
+        with (
+            patch.object(
+                pd.DataFrame,
+                "to_csv",
+                side_effect=AssertionError("CSV write attempted")
+            ),
+            patch.object(
+                pd.DataFrame,
+                "to_excel",
+                side_effect=AssertionError("Excel write attempted")
+            ),
+            patch(
+                "builtins.open",
+                side_effect=AssertionError("File open attempted")
+            ),
+            patch(
+                "pathlib.Path.open",
+                side_effect=AssertionError("Path.open attempted")
+            ),
+        ):
+            result = self.model.build_monthly_water(
+                copy.deepcopy(self.config)
+            )
+
+        self.assertEqual(len(result), 36)
+
+
+if __name__ == "__main__":
+    unittest.main()

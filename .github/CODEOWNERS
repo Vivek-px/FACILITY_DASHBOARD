@@ -1,0 +1,21 @@
+# Replace @p1-username etc. with real GitHub handles.
+/facility/data/            @p1-username
+/facility/pipeline.py      @p1-username
+/scripts/                  @p1-username
+/tests/test_data.py        @p1-username
+/tests/test_injection.py   @p1-username
+/tests/test_pipeline.py    @p1-username
+/requirements.txt          @p1-username
+/README.md                 @p1-username
+/facility/analytics/       @p2-username
+/facility/mocks.py         @p2-username
+/tests/test_analytics.py   @p2-username
+/facility/recommendations/ @p3-username
+/facility/viz/             @p3-username
+/dashboard/                @p3-username
+/app.py                    @p3-username
+/.streamlit/               @p3-username
+/tests/test_recommendations.py @p3-username
+/tests/test_app.py         @p3-username
+/facility/contracts.py     @p1-username @p2-username @p3-username
+/facility/config.py        @p1-username @p2-username @p3-username

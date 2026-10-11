@@ -1,0 +1,32 @@
+{
+  "model_id": "BBSR_ZONE_A_DEMO",
+  "model_version": "water_monthly_v1",
+  "facility_type": "general_configurable",
+  "location": "Bhubaneswar Zone A, Odisha",
+  "reference_period": {
+    "start_month": "2023-01",
+    "end_month": "2025-12",
+    "frequency": "monthly"
+  },
+  "population": {
+    "equivalent_users": 1000,
+    "classification": "HYPOTHETICAL"
+  },
+  "demand": {
+    "litres_per_person_per_day": 135,
+    "additional_operational_use_l": 0,
+    "benchmark_source": "MoHUA urban water-supply service-level benchmark",
+    "benchmark_interpretation": "SIMULATION_ASSUMPTION_NOT_MEASURED_CONSUMPTION"
+  },
+  "calendar": {
+    "operating_schedule": "calendar_based",
+    "day_count_method": "actual_days_in_month"
+  },
+  "output": {
+    "monthly_field": "water_consumption_l",
+    "monthly_unit": "litres",
+    "existing_mvp_field": "water_kl",
+    "litres_per_kl": 1000,
+    "data_status": "SYNTHETIC_BENCHMARK_BASED"
+  }
+}

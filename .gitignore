@@ -1,0 +1,23 @@
+# generated data (recreated by scripts/generate_data.py or on first app start)
+data/*.csv
+!tests/fixtures/*.csv
+# secrets
+.env
+.streamlit/secrets.toml
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+# notebooks / editors / OS
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# demo artefacts
+recordings/
+*.log
+check.png
