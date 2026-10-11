@@ -18,6 +18,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from zone_ui.home import render_home
+
 st.set_page_config(page_title="Zone A · Intelligence", page_icon="◈", layout="wide", initial_sidebar_state="expanded")
 
 ROOT = Path(__file__).resolve().parent
@@ -63,6 +65,9 @@ p,li,label,[data-testid="stCaptionContainer"] {color:#C0C5CD;}
 .stButton button[kind="primary"],.stDownloadButton button[kind="primary"] {background:#F4C430;color:#12151A;border:0;}
 .stButton button,.stDownloadButton button {background:#252A32!important;border:1px solid #77704D!important;color:#F7F7F2!important;border-radius:9px!important;font-weight:700;}
 .stButton button:hover,.stDownloadButton button:hover {border-color:#F4C430!important;color:#F4C430!important;}
+.topbar {display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding:6px 0 14px;border-bottom:1px solid #303640;margin-bottom:10px;}
+.topbar-title {font-family:'Manrope',sans-serif;font-size:clamp(24px,2.4vw,32px);font-weight:800;color:#F6F6F2;margin-top:4px;}
+.topbar-note {color:#AEB4BE;font-size:13px;}
 .hero {border:1px solid #60532C;border-left:5px solid #F4C430;border-radius:13px;padding:28px 30px;background:linear-gradient(110deg,#25251D 0%,#1A1E25 58%,#141820);margin-bottom:20px;}
 .eyebrow {color:#F4C430;font-size:11px;letter-spacing:.14em;font-weight:800;text-transform:uppercase;}
 .hero h1 {font-size:clamp(27px,3vw,42px);font-weight:800;margin:10px 0 14px;line-height:1.16;}
@@ -264,42 +269,14 @@ if view.empty:
     st.warning("Select at least one year to display historical data.")
     st.stop()
 
-st.markdown(f"""<div class="hero"><div class="eyebrow">Public Facility Operations · Bhubaneswar</div>
-<h1>Bhubaneswar <span style="color:{CYAN}">Zone A</span><br>Facility Intelligence</h1>
-<p>Eight-domain sustainability, safety and infrastructure monitoring, explainable alerts, and live scenario planning.
-Scenario changes are isolated from the verified historical record.</p></div>""", unsafe_allow_html=True)
+st.markdown(f"""<div class="topbar"><div>
+<div class="topbar-title">Zone A <span style="color:{CYAN}">monthly report</span></div></div>
+<div class="topbar-note">Data up to {hist.date.max():%B %Y}</div></div>""", unsafe_allow_html=True)
 
-st.caption(f"{len(view)} monthly records selected · {hist.date.min():%b %Y}–{hist.date.max():%b %Y} complete history · {len(available_metrics)} available indicators · Data last period: {hist.date.max():%B %Y}")
-
-tabs = st.tabs(["Command Center", "Domain Intelligence", "Live Scenario Lab", "Recommendations", "Data & Methodology"])
+tabs = st.tabs(["Overview", "Explore by topic", "What-if planner", "Alerts & actions", "About the data"])
 
 with tabs[0]:
-    st.markdown('<div class="section-label">Operational overview</div>', unsafe_allow_html=True)
-    cards = [key for key in DEFAULT_KEYS if key in available_metrics]
-    for start in range(0, len(cards), 4):
-        cols = st.columns(4)
-        for offset, key in enumerate(cards[start:start+4]):
-            metric = available_metrics[key]
-            s = view[key].dropna()
-            if s.empty:
-                continue
-            val = float(s.iloc[-1])
-            delta = None
-            if len(s) >= 2 and abs(float(s.iloc[-2])) > 1e-9:
-                delta = f"{(val/s.iloc[-2]-1)*100:+.1f}% vs prior month"
-            with cols[offset]:
-                st.metric(metric.name, fmt(val, metric.unit), delta, delta_color="off")
-    st.markdown('<div class="section-label">Cross-domain history</div>', unsafe_allow_html=True)
-    chart_a, chart_b = st.columns(2)
-    with chart_a:
-        key = "electricity_kwh" if "electricity_kwh" in available_metrics else next(iter(available_metrics))
-        st.markdown(f"**{ALL_METRICS[key].name}**")
-        st.plotly_chart(series_chart(view, key), width="stretch", config={"displayModeBar": False}, key="overview_energy_chart")
-    with chart_b:
-        key = "pm25_ug_m3" if "pm25_ug_m3" in available_metrics else list(available_metrics)[-1]
-        st.markdown(f"**{ALL_METRICS[key].name}**")
-        st.plotly_chart(series_chart(view, key), width="stretch", config={"displayModeBar": False}, key="overview_air_chart")
-    st.markdown('<div class="note">DATA BOUNDARY  ·  PM2.5 represents the Palasuni monitoring station, not all of Zone A. Water demand is a 135-LPCD × 1,000-equivalent-user hypothetical model. The workbook carbon series is prototype-calculated CO₂e with an unverified method. These distinctions carry through all charts and exports.</div>', unsafe_allow_html=True)
+    render_home(hist)
 
 with tabs[1]:
     st.markdown('<div class="section-label">Detailed resource and resilience intelligence</div>', unsafe_allow_html=True)
@@ -408,6 +385,7 @@ with tabs[3]:
 
 with tabs[4]:
     st.markdown('<div class="section-label">Provenance, constraints and audit-friendly access</div>', unsafe_allow_html=True)
+    st.caption(f"{len(view)} monthly records selected · {hist.date.min():%b %Y}–{hist.date.max():%b %Y} complete history · {len(available_metrics)} available indicators")
     st.markdown("#### Source hierarchy")
     st.markdown("**Authoritative 2023–2025 monthly base:** `facility_monthly_with_water.csv` — original 26 columns preserved. **Added historical fields:** original 120-month workbook, joined on exact `date` + `zone`. **Unified file:** `facility_zone_a_unified.csv`, read-only in this app.")
     st.markdown("**Air quality:** Bhubaneswar Zone A is the dashboard's facility geography. Palasuni Water Works is the reference station for the PM2.5 time series, not a claim of zone-wide measurement. Verified records and provenance fields are kept intact. PM2.5 concentration is not the same as official AQI.")

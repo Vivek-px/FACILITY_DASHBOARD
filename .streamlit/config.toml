@@ -1,9 +1,11 @@
 [theme]
-base = "light"
-primaryColor = "#0E7C7B"
-backgroundColor = "#F3F6F7"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#10242E"
+# Matches the dark + gold design in app.py, so Streamlit's own widgets (dropdowns, pop-ups,
+# tables) are dark too. A light base here made widget text unreadable.
+base = "dark"
+primaryColor = "#F4C430"
+backgroundColor = "#0B0E13"
+secondaryBackgroundColor = "#1F252E"
+textColor = "#F6F6F2"
 font = "sans serif"
 
 [server]
